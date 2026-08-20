@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Complete Compendium — Monster Filter &amp; Editor</title>
+<style>
+ :root{
+ --bg:#1c140d;--panel:#251a10;--panel2:#2f2114;--ink:#f2e4cf;--muted:#c7a97e;
+ --accent:#e0a53c;--accent2:#c9622b;--line:#4a3620;--chip:#3a2915;
+ --ok:#6a9e6a;--danger:#c45c4a;--info:#7fa8c9;
+ --mono:'Cascadia Code','Cascadia Mono','Fira Code','JetBrains Mono','Consolas','Courier New',monospace;
+ }
+ *{box-sizing:border-box}
+ body{
+ margin:0;font-family:'Iowan Old Style','Palatino Linotype',Georgia,serif;
+ background:var(--bg);color:var(--ink);height:100vh;display:flex;flex-direction:column;overflow:hidden
+ }
+
+ /* ── Toolbar ─────────────────────────────────────────── */
+ header{
+ display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+ padding:8px 12px;background:linear-gradient(180deg,#2a1c0f,#1c140d);
+ border-bottom:2px solid var(--line);flex:none
+ }
+ header h1{font-size:15px;margin:0 6px 0 0;color:var(--accent);white-space:nowrap;letter-spacing:.3px}
+ button,.file-btn{
+ background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:6px;
+ padding:5px 11px;cursor:pointer;font:inherit;font-size:13px;white-space:nowrap
+ }
+ button:hover:not(:disabled),.file-btn:hover{border-color:var(--accent);color:var(--accent)}
+ button:disabled{opacity:.4;cursor:default}
+ button.primary{background:var(--accent);color:#241704;border-color:var(--accent);font-weight:700}
+ button.primary:hover:not(:disabled){color:#241704;background:#eeb44b}
+ button.danger{color:var(--danger);border-color:var(--danger)}
+ button.on{background:var(--accent);color:#241704;border-color:var(--accent);font-weight:700}
+ input[type=text],input[type=number],select,textarea{
+ background:#150e07;color:var(--ink);border:1px solid var(--line);
+ border-radius:6px;padding:5px 9px;font:inherit;font-size:13px
+ }
+ input:focus,select:focus,textarea:focus{outline:1px solid var(--accent)}
+ #search{width:230px}
+ #status{margin-left:auto;color:var(--muted);white-space:nowrap;font-size:12.5px}
+ #status.dirty{color:var(--accent);font-weight:600}
+ .sep{width:1px;height:22px;background:var(--line);flex:none}
+
+ /* ── Filter bar ──────────────────────────────────────── */
+ #filterbar{
+ display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+ padding:7px 12px;background:var(--panel);border-bottom:1px solid var(--line);flex:none
+ }
+ .fgroup{display:inline-flex;align-items:center;gap:5px}
+ .flabel{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+ .num-range{width:58px;text-align:right}
+ .ms-btn{position:relative;display:inline-flex;align-items:center;gap:6px}
+ .ms-btn .pill{
+ background:var(--accent);color:#241704;border-radius:9px;padding:0 6px;
+ font-size:11px;font-weight:700;line-height:16px
+ }
+ .ms-btn.active{border-color:var(--accent);color:var(--accent)}
+ select.f{max-width:150px}
+
+ /* Multi-select popover */
+ .ms-pop{
+ position:fixed;z-index:80;background:var(--panel2);border:1px solid var(--line);
+ border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;
+ box-shadow:0 6px 22px rgba(0,0,0,.6);width:430px;max-height:66vh
+ }
+ .ms-pop[hidden]{display:none}
+ .ms-pop .ms-tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+ .ms-pop .ms-tools input[type=text]{flex:1;min-width:120px}
+ .ms-pop .ms-tools button{padding:3px 8px;font-size:12px}
+ .ms-list{overflow:auto;display:flex;flex-direction:column;gap:1px;padding-right:2px}
+ .ms-list label{
+ display:grid;grid-template-columns:16px 1fr auto;gap:8px;align-items:center;
+ font-size:13px;cursor:pointer;padding:3px 5px;border-radius:4px;line-height:1.3
+ }
+ .ms-list label:hover{background:#3a2913}
+ .ms-list label.checked{color:var(--accent)}
+ .ms-list .sub{color:var(--muted);font-size:11px}
+ .ms-list .cnt{color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums}
+ .ms-list input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer}
+ .ms-mode{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:6px}
+ .ms-mode label{display:inline-flex;gap:4px;align-items:center;cursor:pointer;color:var(--ink)}
+
+ /* Active-filter chips */
+ #chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+ .chip{
+ display:inline-flex;align-items:center;gap:6px;background:var(--chip);
+ border:1px solid var(--line);border-radius:12px;padding:2px 6px 2px 10px;font-size:12px;color:var(--muted)
+ }
+ .chip b{color:var(--ink);font-weight:600}
+ .chip .x{cursor:pointer;color:var(--muted);border:none;background:none;padding:0 3px;font-size:13px}
+ .chip .x:hover{color:var(--danger)}
+
+ /* ── Layout ──────────────────────────────────────────── */
+ main{display:flex;flex:1;min-height:0}
+ #tableWrap{flex:1;overflow:auto}
+ #empty,#loading{padding:26px 34px;max-width:760px;color:var(--muted);line-height:1.65;overflow:auto}
+ #empty h2,#loading h2{color:var(--accent);font-size:17px;margin:0 0 10px}
+ #empty kbd,#loading kbd{
+ background:#150e07;border:1px solid var(--line);border-radius:4px;
+ padding:1px 5px;font-family:var(--mono);font-size:12px;color:var(--ink)
+ }
+ #empty code{font-family:var(--mono);font-size:12.5px;color:var(--info)}
+ table{border-collapse:collapse;table-layout:fixed;width:auto}
+ thead th{
+ position:sticky;top:0;background:var(--panel);text-align:left;
+ padding:7px 9px;border-bottom:2px solid var(--line);cursor:pointer;
+ -webkit-user-select:none;user-select:none;white-space:nowrap;color:var(--muted);font-size:12.5px;
+ overflow:hidden;text-overflow:ellipsis;z-index:2;position:sticky
+ }
+ thead th{position:sticky}
+ thead th .arrow{color:var(--accent);font-size:11px}
+ thead th:hover{color:var(--accent)}
+ th{position:relative}
+ th .resizer{
+ position:absolute;top:0;right:0;width:7px;height:100%;
+ cursor:col-resize;-webkit-user-select:none;user-select:none
+ }
+ th .resizer:hover,th .resizer.active{background:var(--accent)}
+ th.colmenu-th{cursor:default;text-align:center;padding:4px 2px;width:34px}
+ th.colmenu-th button{padding:2px 8px;font-size:12px;line-height:1.4}
+ .col-menu{
+ position:fixed;z-index:60;background:var(--panel2);border:1px solid var(--line);
+ border-radius:6px;padding:8px 12px;display:flex;flex-direction:column;gap:6px;
+ box-shadow:0 4px 14px rgba(0,0,0,.55);max-height:60vh;overflow:auto
+ }
+ .col-menu[hidden]{display:none}
+ .col-menu label{font-size:13px;display:flex;gap:8px;align-items:center;cursor:pointer;white-space:nowrap;color:var(--ink)}
+ .col-menu input{accent-color:var(--accent)}
+ tbody td{
+ padding:5px 9px;border-bottom:1px solid #33240f;font-size:13px;
+ white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+ }
+ tbody tr{cursor:pointer}
+ tbody tr:hover{background:var(--panel2)}
+ tbody tr.selected{background:#3a2913;outline:1px solid var(--accent)}
+ td.num{text-align:right;font-variant-numeric:tabular-nums}
+ .badge{
+ display:inline-block;padding:0 7px;border-radius:10px;font-size:11.5px;
+ background:var(--chip);border:1px solid var(--line);color:var(--muted);
+ max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;line-height:18px
+ }
+ .badge.psi{color:var(--info);border-color:var(--info)}
+ .badge.ds{color:var(--accent2);border-color:var(--accent2)}
+ .edited-dot{color:var(--accent)}
+ .dim{color:var(--muted)}
+
+ /* ── Detail / edit panel ─────────────────────────────── */
+ #edSplit{width:6px;flex:none;cursor:col-resize;background:var(--line);-webkit-user-select:none;user-select:none}
+ #edSplit[hidden]{display:none}
+ #edSplit:hover,#edSplit.active{background:var(--accent)}
+ #editor{
+ width:470px;min-width:320px;border-left:1px solid var(--line);
+ background:var(--panel);overflow-y:auto;padding:14px;display:none;flex:none
+ }
+ #editor.open{display:block}
+ #editor h2{margin:0 0 3px;font-size:17px;color:var(--accent);line-height:1.25}
+ #editor .meta{color:var(--muted);font-size:12px;margin-bottom:12px;line-height:1.55}
+ #editor .meta a{color:var(--info)}
+ #editor h3{
+ font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;
+ margin:16px 0 7px;border-bottom:1px solid var(--line);padding-bottom:4px
+ }
+ .ed-btns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+ .field{margin-bottom:8px}
+ .field label{display:block;font-size:11px;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:.4px}
+ .field input,.field textarea,.field select{width:100%;font-size:13px}
+ .field textarea{min-height:52px;resize:vertical;font-family:inherit}
+ .field.ro .val{
+ font-size:13px;background:#150e07;border:1px solid var(--line);border-radius:6px;
+ padding:5px 9px;min-height:29px;white-space:pre-wrap;word-break:break-word
+ }
+ .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+ .srclist{display:flex;flex-direction:column;gap:4px}
+ .srclist .srcrow{
+ display:flex;gap:8px;align-items:baseline;font-size:12.5px;
+ background:#150e07;border:1px solid var(--line);border-radius:6px;padding:4px 8px
+ }
+ .srclist .srcrow .yr{color:var(--muted);font-size:11.5px;white-space:nowrap}
+ .derived{font-size:12px;color:var(--muted);font-family:var(--mono);line-height:1.7;word-break:break-word}
+ .derived b{color:var(--ink);font-weight:400}
+ .warn{color:var(--accent2);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+
+<header>
+ <h1>🏜️ Monster Filter &amp; Editor</h1>
+ <button id="btnOpen">Open JSON…</button>
+ <button id="btnReload" title="Re-fetch monster_index.json from the server">Reload</button>
+ <span class="sep"></span>
+ <button id="btnSave" disabled title="Save edits back to monster_index.json (Ctrl+S)">Save</button>
+ <button id="btnSaveAs" disabled>Save As…</button>
+ <button id="btnExport" disabled title="Download the currently filtered rows">Export view…</button>
+ <span class="sep"></span>
+ <input type="text" id="search" placeholder="Search name, page, or any stat…" disabled>
+ <span id="status">Loading…</span>
+</header>
+
+<div id="filterbar" hidden>
+ <div class="fgroup">
+  <span class="flabel">Found in</span>
+  <button id="msBooks" class="ms-btn">Any book</button>
+ </div>
+ <div class="fgroup">
+  <span class="flabel">Setting</span>
+  <button id="msSettings" class="ms-btn">Any setting</button>
+ </div>
+ <div class="fgroup">
+  <span class="flabel">Hit dice</span>
+  <input type="number" id="hdMin" class="num-range" placeholder="min" step="0.5">
+  <span class="dim">–</span>
+  <input type="number" id="hdMax" class="num-range" placeholder="max" step="0.5">
+ </div>
+ <div class="fgroup">
+  <span class="flabel">XP</span>
+  <input type="number" id="xpMin" class="num-range" placeholder="min">
+  <span class="dim">–</span>
+  <input type="number" id="xpMax" class="num-range" placeholder="max">
+ </div>
+ <select id="fSize" class="f"><option value="">Any size</option></select>
+ <select id="fInt" class="f"><option value="">Any intelligence</option></select>
+ <select id="fFreq" class="f"><option value="">Any frequency</option></select>
+ <select id="fAlign" class="f"><option value="">Any alignment</option></select>
+ <select id="fDiet" class="f"><option value="">Any diet</option></select>
+ <select id="fMove" class="f"><option value="">Any movement</option></select>
+ <button id="fPsi" title="Only pages that carry a Psionics Summary">Psionic</button>
+ <button id="fEdited" title="Only rows you have edited">Edited</button>
+ <span class="sep"></span>
+ <button id="btnDarkSun" class="primary" title="Select every Dark Sun sourcebook in the Found in filter">Dark Sun preset</button>
+ <button id="btnClear">Clear filters</button>
+</div>
+<div id="chipbar" hidden style="padding:0 12px 7px;background:var(--panel);border-bottom:1px solid var(--line)">
+ <div id="chips"></div>
+</div>
+
+<main>
+ <div id="loading"><h2>Loading monster index…</h2><p>Fetching <code>monster_index.json</code>.</p></div>
+ <div id="empty" hidden></div>
+ <div id="tableWrap" hidden>
+  <table id="dataTable">
+   <colgroup id="colgroup"></colgroup>
+   <thead><tr id="headRow"></tr></thead>
+   <tbody id="tbody"></tbody>
+  </table>
+ </div>
+ <div id="edSplit" hidden title="Drag to resize · double-click to reset"></div>
+ <aside id="editor"></aside>
+</main>
+
+<div id="colMenu" class="col-menu" hidden></div>
+<div id="msPop" class="ms-pop" hidden>
+ <div class="ms-tools">
+  <input type="text" id="msSearch" placeholder="Filter list…">
+  <button id="msAll">All</button>
+  <button id="msNone">None</button>
+  <button id="msInvert">Invert</button>
+  <button id="msClose">Done</button>
+ </div>
+ <div class="ms-list" id="msList"></div>
+ <div class="ms-mode" id="msModeRow">
+  <span>Match</span>
+  <label><input type="radio" name="msmode" value="any" checked> any of these</label>
+  <label><input type="radio" name="msmode" value="all"> all of these</label>
+ </div>
+</div>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Complete Compendium — Monster Filter & Editor
+   Standalone companion to the Gatsby site. Reads static/tools/monster_index.json
+   (built by scripts/build_monster_index.js), one row per statblock.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const DATA_URLS = ['monster_index.json', '/tools/monster_index.json'];
+
+/* Short code -> statblock label. Must match scripts/build_monster_index.js. */
+const FIELD_CODES = {
+  ct:'Climate/Terrain', fr:'Frequency', org:'Organization', cyc:'Activity Cycle',
+  dt:'Diet', int:'Intelligence', tr:'Treasure', al:'Alignment', na:'No. Appearing',
+  ac:'Armor Class', mv:'Movement', hd:'Hit Dice', th:'THAC0', noa:'No. of Attacks',
+  dmg:'Damage/Attack', sa:'Special Attacks', sd:'Special Defenses',
+  mr:'Magic Resistance', sz:'Size', mor:'Morale', xp:'XP Value',
+};
+/* Panel field order — the order they appear in a printed 2e statblock. */
+const FIELD_ORDER = ['ct','fr','org','cyc','dt','int','tr','al','na','ac','mv','hd','th','noa','dmg','sa','sd','mr','sz','mor','xp'];
+
+/* ── State ─────────────────────────────────────────────────────────────── */
+let data = null;          // whole index object
+let rows = [];            // data.rows
+let books = {};           // publish_id -> book record
+let view = [];            // current filtered + sorted rows
+let fileHandle = null;
+let fileName = 'monster_index.json';
+let dirty = false;
+let sortKey = 'name', sortDir = 1;
+let selectedId = null;
+let justResized = false;
+let rendered = 0;         // rows painted so far (incremental paint)
+const CHUNK = 400;
+const editedIds = new Set();
+
+const filters = {
+  q: '',
+  books: new Set(), booksMode: 'any',
+  settings: new Set(),
+  hdMin: null, hdMax: null,
+  xpMin: null, xpMax: null,
+  sz: '', int: '', fr: '', al: '', dt: '', move: '',
+  psi: false, edited: false,
+};
+
+/* ── Column model ──────────────────────────────────────────────────────── */
+const SIZE_ORDER = ['Tiny','Small','Medium','Large','Huge','Gargantuan'];
+const FREQ_ORDER = ['Common','Uncommon','Rare','Very rare','Mythical','Unique'];
+const INT_ORDER  = ['Non-','Animal','Semi-','Low','Average','Very','High','Exceptional','Genius','Supra-genius','Godlike'];
+const ALIGN_ORDER = ['LG','NG','CG','LN','N','CN','LE','NE','CE','Any','None'];
+const MOVE_MODES = ['Fly','Swim','Burrow','Climb','Web','Jump'];
+
+const COLUMNS = [
+  { key:'name',  label:'Creature',        w:230, get:r=>r.name,        sort:r=>r.name },
+  { key:'page',  label:'Page',            w:190, get:r=>r.page,        sort:r=>r.page },
+  { key:'set',   label:'Setting',         w:150, get:r=>r.set||'',     sort:r=>r.set||'' },
+  { key:'hd',    label:'Hit Dice',        w:88,  get:r=>r.sb.hd||'',   sort:r=>r.d.hdSort },
+  { key:'ac',    label:'AC',              w:52,  num:true, get:r=>r.sb.ac||'',  sort:r=>r.d.ac },
+  { key:'th',    label:'THAC0',           w:62,  num:true, get:r=>r.sb.th||'',  sort:r=>r.d.thac0 },
+  { key:'xp',    label:'XP',              w:74,  num:true, get:r=>r.sb.xp||'',  sort:r=>r.d.xp },
+  { key:'sz',    label:'Size',            w:78,  get:r=>r.d.sz||'',    sort:r=>SIZE_ORDER.indexOf(r.d.sz) },
+  { key:'int',   label:'Int',             w:96,  get:r=>r.d.int||'',   sort:r=>r.d.intScore },
+  { key:'fr',    label:'Frequency',       w:92,  get:r=>r.d.fr||'',    sort:r=>FREQ_ORDER.indexOf(r.d.fr) },
+  { key:'al',    label:'Align',           w:62,  get:r=>r.d.al||'',    sort:r=>r.d.al||'' },
+  { key:'mv',    label:'Movement',        w:120, get:r=>r.sb.mv||'',   sort:r=>r.d.mv },
+  { key:'books', label:'Found in',        w:290, get:r=>bookTitles(r).join(' · '), sort:r=>bookTitles(r)[0]||'' },
+  { key:'psi',   label:'Psi',             w:46,  get:r=>r.psi?'✦':'', sort:r=>r.psi?1:0 },
+  { key:'ct',    label:'Climate/Terrain', w:180, get:r=>r.sb.ct||'',   sort:r=>r.sb.ct||'' },
+  { key:'na',    label:'No. App.',        w:96,  get:r=>r.sb.na||'',   sort:r=>r.sb.na||'' },
+  { key:'noa',   label:'Attacks',         w:70,  num:true, get:r=>r.sb.noa||'', sort:r=>r.d.noa },
+  { key:'dmg',   label:'Damage/Attack',   w:180, get:r=>r.sb.dmg||'',  sort:r=>r.sb.dmg||'' },
+  { key:'mor',   label:'Morale',          w:110, get:r=>r.sb.mor||'',  sort:r=>r.d.mor },
+  { key:'org',   label:'Organization',    w:140, get:r=>r.sb.org||'',  sort:r=>r.sb.org||'' },
+  { key:'dt',    label:'Diet',            w:100, get:r=>r.sb.dt||'',   sort:r=>r.sb.dt||'' },
+  { key:'cyc',   label:'Activity',        w:90,  get:r=>r.sb.cyc||'',  sort:r=>r.sb.cyc||'' },
+  { key:'tr',    label:'Treasure',        w:110, get:r=>r.sb.tr||'',   sort:r=>r.sb.tr||'' },
+  { key:'mr',    label:'Magic Res.',      w:92,  get:r=>r.sb.mr||'',   sort:r=>r.sb.mr||'' },
+  { key:'sa',    label:'Special Attacks', w:190, get:r=>r.sb.sa||'',   sort:r=>r.sb.sa||'' },
+  { key:'sd',    label:'Special Defenses',w:190, get:r=>r.sb.sd||'',   sort:r=>r.sb.sd||'' },
+  { key:'key',   label:'Key',             w:96,  get:r=>r.key,         sort:r=>r.key },
+];
+const DEFAULT_HIDDEN = ['ct','na','noa','dmg','mor','org','dt','cyc','tr','mr','sa','sd','key'];
+
+/* Column prefs persist per browser. */
+const LS_COLS = 'cc-monster-editor.cols.v1';
+let colPrefs = { widths:{}, hidden: DEFAULT_HIDDEN.slice() };
+try {
+  const saved = JSON.parse(localStorage.getItem(LS_COLS));
+  if (saved && typeof saved === 'object') colPrefs = Object.assign(colPrefs, saved);
+} catch (e) { /* ignore */ }
+function savePrefs(){ try { localStorage.setItem(LS_COLS, JSON.stringify(colPrefs)); } catch (e) { /* ignore */ } }
+function colWidth(k){
+  const c = COLUMNS.find(x => x.key === k);
+  return colPrefs.widths[k] != null ? colPrefs.widths[k] : (c ? c.w : 110);
+}
+function visibleCols(){ return COLUMNS.filter(c => !colPrefs.hidden.includes(c.key)); }
+
+/* ── DOM shorthands ────────────────────────────────────────────────────── */
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ── Normalizers (mirror of scripts/build_monster_index.js) ────────────── */
+const cleanStr = v => v == null ? '' : String(v).replace(/\s+/g,' ').trim();
+function firstInt(s){ const m = /(-?\d+)/.exec(String(s == null ? '' : s).replace(/,/g,'')); return m ? parseInt(m[1],10) : null; }
+
+function parseHD(raw){
+  const s = cleanStr(raw);
+  if (!s) return { hd:null, hdMod:null, hdMax:null, sort:null };
+  // "1 hp", "77-84 hp", "75-150 hit points" — hit points, not hit dice.
+  // (Guarded so "17 (97 hit points)" stays 17 HD.)
+  if (/^\s*\d+(\s*[-+]\s*\d+)?(d\d+)?\s*(hp\b|hit\s*points?\b)/i.test(s)) return { hd:0, hdMod:null, hdMax:null, sort:0 };
+  const frac = { '½':0.5, '1/2':0.5, '¼':0.25, '1/4':0.25, '¾':0.75, '3/4':0.75 };
+  for (const g in frac) if (s.indexOf(g) === 0) return { hd:frac[g], hdMod:null, hdMax:null, sort:frac[g] };
+  const range = /^\s*(\d+)\s*-\s*(\d+)/.exec(s);
+  if (range) {
+    const lo = +range[1], hi = +range[2];
+    if (hi <= lo) return { hd:lo, hdMod:-hi, hdMax:null, sort:lo - hi/100 };
+    return { hd:lo, hdMod:null, hdMax:hi, sort:lo };
+  }
+  const plus = /^\s*(\d+)\s*\+\s*(\d+)/.exec(s);
+  if (plus) return { hd:+plus[1], hdMod:+plus[2], hdMax:null, sort:(+plus[1]) + (+plus[2])/100 };
+  const flat = /^\s*(\d+)/.exec(s);
+  if (flat) return { hd:+flat[1], hdMod:null, hdMax:null, sort:+flat[1] };
+  return { hd:null, hdMod:null, hdMax:null, sort:null };
+}
+const SIZE_LABELS = { T:'Tiny', S:'Small', M:'Medium', L:'Large', H:'Huge', G:'Gargantuan' };
+function parseSize(raw){
+  const s = cleanStr(raw); if (!s) return null;
+  const m = /^([TSMLHG])\b/.exec(s); if (m) return SIZE_LABELS[m[1]];
+  for (const l of SIZE_ORDER) if (new RegExp('^' + l, 'i').test(s)) return l;
+  return null;
+}
+const INT_LADDER = [
+  [/^supra-?genius\b/i,'Supra-genius',19],[/^god-?like\b|^deity\b/i,'Godlike',21],
+  [/^non-?\b|^none\b/i,'Non-',0],[/^animal\b/i,'Animal',1],[/^semi-?\b/i,'Semi-',2],
+  [/^low\b/i,'Low',5],[/^average\b/i,'Average',8],[/^very\b/i,'Very',11],
+  [/^high(ly)?\b/i,'High',13],[/^exceptional\b/i,'Exceptional',15],[/^genius\b/i,'Genius',17],
+];
+function parseIntelligence(raw){
+  const s = cleanStr(raw); if (!s) return { label:null, score:null };
+  let label = null, base = null;
+  for (const row of INT_LADDER) if (row[0].test(s)) { label = row[1]; base = row[2]; break; }
+  const p = /\((\d+)/.exec(s);
+  return { label: label, score: p ? +p[1] : base };
+}
+function parseFrequency(raw){
+  const s = cleanStr(raw).toLowerCase(); if (!s) return null;
+  if (/^very\s+rare/.test(s)) return 'Very rare';
+  if (/^unique/.test(s)) return 'Unique';
+  if (/^uncommon/.test(s)) return 'Uncommon';
+  if (/^rare/.test(s)) return 'Rare';
+  if (/^common/.test(s)) return 'Common';
+  if (/^mythical/.test(s)) return 'Mythical';
+  return null;
+}
+function parseDiet(raw){
+  const s = cleanStr(raw).toLowerCase(); if (!s) return null;
+  if (/^omnivor/.test(s)) return 'Omnivore';
+  if (/^carnivor/.test(s)) return 'Carnivore';
+  if (/^herbivor/.test(s)) return 'Herbivore';
+  if (/^insectivor/.test(s)) return 'Carnivore';
+  if (/^scaveng/.test(s)) return 'Scavenger';
+  if (/^(nil|none|n\/a)\b/.test(s)) return 'None';
+  if (/^special|^see /.test(s)) return 'Special';
+  return 'Other';
+}
+function parseCycle(raw){
+  const s = cleanStr(raw).toLowerCase(); if (!s) return null;
+  if (/^any\b|^all\b/.test(s)) return 'Any';
+  if (/^(day|diurnal)\b/.test(s)) return 'Day';
+  if (/^(night|nocturnal|dark)/.test(s)) return 'Night';
+  return 'Other';
+}
+function parseAlignment(raw){
+  const s = cleanStr(raw).toLowerCase(); if (!s) return null;
+  if (/^any\b/.test(s)) return 'Any';
+  if (/^(nil|none|n\/a)\b/.test(s)) return 'None';
+  const law = /lawful/.test(s) ? 'L' : /chaotic/.test(s) ? 'C' : /neutral/.test(s) ? 'N' : null;
+  const good = /good/.test(s) ? 'G' : /evil/.test(s) ? 'E' : /neutral/.test(s) ? 'N' : null;
+  if (law === 'N' && (good === 'N' || good === null)) return 'N';
+  if (law && good) return law + good;
+  return null;
+}
+function parseMovement(raw){
+  const s = cleanStr(raw); if (!s) return { base:null, modes:[] };
+  const base = firstInt(s.split(',')[0]);
+  const modes = [];
+  if (/\bFl\b/i.test(s)) modes.push('Fly');
+  if (/\bSw\b/i.test(s)) modes.push('Swim');
+  if (/\bBr\b/i.test(s)) modes.push('Burrow');
+  if (/\bWb\b/i.test(s)) modes.push('Web');
+  if (/\bCl\b/i.test(s)) modes.push('Climb');
+  if (/\bJp\b/i.test(s)) modes.push('Jump');
+  return { base: Number.isFinite(base) ? base : null, modes: modes };
+}
+function parseXP(raw){
+  const s = cleanStr(raw).replace(/,/g,'');
+  return /^\s*\d/.test(s) ? firstInt(s) : null;
+}
+/** Recompute a row's derived block after an edit. */
+function rederive(r){
+  const hd = parseHD(r.sb.hd), intel = parseIntelligence(r.sb.int), mv = parseMovement(r.sb.mv);
+  const moraleInParens = firstInt(String(r.sb.mor || '').replace(/^[^(]*\(/, ''));
+  r.d = {
+    hd:hd.hd, hdMod:hd.hdMod, hdMax:hd.hdMax, hdSort:hd.sort,
+    ac:firstInt(r.sb.ac), thac0:firstInt(r.sb.th), xp:parseXP(r.sb.xp),
+    mor: moraleInParens != null ? moraleInParens : firstInt(r.sb.mor),
+    mv:mv.base, modes: mv.modes.length ? mv.modes : undefined,
+    sz:parseSize(r.sb.sz), int:intel.label, intScore:intel.score,
+    fr:parseFrequency(r.sb.fr), dt:parseDiet(r.sb.dt), cyc:parseCycle(r.sb.cyc),
+    al:parseAlignment(r.sb.al), noa:firstInt(r.sb.noa),
+  };
+  r._hay = null;
+}
+
+/* ── Helpers ───────────────────────────────────────────────────────────── */
+function bookTitles(r){ return (r.src || []).map(id => (books[id] && books[id].title) || ('#' + id)); }
+function bookLabel(id){ const b = books[id]; return b ? (b.title + ' (' + id + ')') : ('Unknown book (' + id + ')'); }
+function haystack(r){
+  if (r._hay) return r._hay;
+  const parts = [r.name, r.page, r.set, r.key].concat(bookTitles(r), r.src || []);
+  for (const c of FIELD_ORDER) if (r.sb[c]) parts.push(r.sb[c]);
+  if (r.sb.x) for (const k in r.sb.x) { parts.push(k); parts.push(r.sb.x[k]); }
+  r._hay = parts.join('  ').toLowerCase();
+  return r._hay;
+}
+function darkSunBookIds(){
+  return Object.keys(books).filter(id => books[id].setting === 'Dark Sun');
+}
+
+/* ── Loading ───────────────────────────────────────────────────────────── */
+async function autoLoad(){
+  for (const url of DATA_URLS) {
+    try {
+      const res = await fetch(url, { cache:'no-cache' });
+      if (!res.ok) continue;
+      const json = await res.json();
+      loadData(json, url.split('/').pop());
+      return;
+    } catch (e) { /* try next */ }
+  }
+  showEmpty();
+}
+
+function showEmpty(){
+  $('loading').hidden = true;
+  $('tableWrap').hidden = true;
+  const e = $('empty');
+  e.hidden = false;
+  e.innerHTML =
+    '<h2>Could not fetch monster_index.json</h2>' +
+    '<p>Browsers block <code>fetch()</code> for pages opened straight off disk ' +
+    '(<code>file://</code>), so the index has to be picked by hand — or the page has to be served.</p>' +
+    '<p><strong>Pick it by hand:</strong> click <kbd>Open JSON…</kbd> above and choose ' +
+    '<code>static/tools/monster_index.json</code>.</p>' +
+    '<p><strong>Or serve the folder</strong> so it loads by itself:</p>' +
+    '<p><code>npx serve static</code> &nbsp;→&nbsp; ' +
+    '<code>http://localhost:3000/tools/monster-editor.html</code><br>' +
+    'or <code>npm run develop</code> &nbsp;→&nbsp; ' +
+    '<code>http://localhost:8000/tools/monster-editor.html</code></p>' +
+    '<p class="dim">Missing the file entirely? Generate it with ' +
+    '<code>node scripts/build_monster_index.js</code>.</p>';
+  $('status').textContent = 'No data loaded';
+}
+
+function loadData(json, name){
+  if (!json || !Array.isArray(json.rows)) {
+    alert('That does not look like a monster index — expected an object with a "rows" array.');
+    return;
+  }
+  data = json;
+  rows = json.rows;
+  books = json.books || {};
+  fileName = name || 'monster_index.json';
+  editedIds.clear();
+  dirty = false;
+  selectedId = null;
+  for (const r of rows) { r._hay = null; if (!r.d) rederive(r); }
+
+  $('loading').hidden = true;
+  $('empty').hidden = true;
+  $('tableWrap').hidden = false;
+  $('filterbar').hidden = false;
+  $('chipbar').hidden = false;
+  $('search').disabled = false;
+  $('btnSaveAs').disabled = false;
+  $('btnExport').disabled = false;
+
+  buildFacetSelects();
+  buildHead();
+  applyFilters();
+}
+
+function buildFacetSelects(){
+  const uniq = (fn, order) => {
+    const s = new Set();
+    for (const r of rows) { const v = fn(r); if (v) s.add(v); }
+    const arr = Array.from(s);
+    if (order) arr.sort((a,b) => order.indexOf(a) - order.indexOf(b));
+    else arr.sort();
+    return arr;
+  };
+  const fill = (el, values, allLabel) => {
+    el.innerHTML = '<option value="">' + esc(allLabel) + '</option>' +
+      values.map(v => '<option value="' + esc(v) + '">' + esc(v) + '</option>').join('');
+  };
+  fill($('fSize'),  uniq(r => r.d.sz, SIZE_ORDER),   'Any size');
+  fill($('fInt'),   uniq(r => r.d.int, INT_ORDER),   'Any intelligence');
+  fill($('fFreq'),  uniq(r => r.d.fr, FREQ_ORDER),   'Any frequency');
+  fill($('fAlign'), uniq(r => r.d.al, ALIGN_ORDER),  'Any alignment');
+  fill($('fDiet'),  uniq(r => r.d.dt),               'Any diet');
+  fill($('fMove'),  MOVE_MODES,                      'Any movement');
+}
+
+/* ── Filtering ─────────────────────────────────────────────────────────── */
+function matches(r){
+  if (filters.q) {
+    const hay = haystack(r);
+    for (const t of filters.q) if (hay.indexOf(t) === -1) return false;
+  }
+  if (filters.books.size) {
+    const src = r.src || [];
+    if (filters.booksMode === 'all') {
+      for (const id of filters.books) if (src.indexOf(id) === -1) return false;
+    } else {
+      let hit = false;
+      for (const id of src) if (filters.books.has(id)) { hit = true; break; }
+      if (!hit) return false;
+    }
+  }
+  if (filters.settings.size && !filters.settings.has(r.set)) return false;
+
+  if (filters.hdMin != null || filters.hdMax != null) {
+    const lo = r.d.hd;
+    if (lo == null) return false;                       // unparsed HD ("Varies")
+    const hi = r.d.hdMax != null ? r.d.hdMax : lo;      // ranges like "5-10"
+    if (filters.hdMin != null && hi < filters.hdMin) return false;
+    if (filters.hdMax != null && lo > filters.hdMax) return false;
+  }
+  if (filters.xpMin != null || filters.xpMax != null) {
+    const xp = r.d.xp;
+    if (xp == null) return false;
+    if (filters.xpMin != null && xp < filters.xpMin) return false;
+    if (filters.xpMax != null && xp > filters.xpMax) return false;
+  }
+  if (filters.sz && r.d.sz !== filters.sz) return false;
+  if (filters.int && r.d.int !== filters.int) return false;
+  if (filters.fr && r.d.fr !== filters.fr) return false;
+  if (filters.al && r.d.al !== filters.al) return false;
+  if (filters.dt && r.d.dt !== filters.dt) return false;
+  if (filters.move && !(r.d.modes || []).includes(filters.move)) return false;
+  if (filters.psi && !r.psi) return false;
+  if (filters.edited && !editedIds.has(r.id)) return false;
+  return true;
+}
+
+function applyFilters(){
+  view = rows.filter(matches);
+  sortView();
+  renderChips();
+  renderBody(true);
+  updateStatus();
+}
+
+function sortView(){
+  const col = COLUMNS.find(c => c.key === sortKey) || COLUMNS[0];
+  const key = col.sort;
+  view.sort((a,b) => {
+    const va = key(a), vb = key(b);
+    const na = va == null || va === '' || va === -1;
+    const nb = vb == null || vb === '' || vb === -1;
+    if (na && nb) return a.name.localeCompare(b.name);
+    if (na) return 1;      // blanks always sink
+    if (nb) return -1;
+    let c;
+    if (typeof va === 'number' && typeof vb === 'number') c = va - vb;
+    else c = String(va).localeCompare(String(vb), undefined, { numeric:true, sensitivity:'base' });
+    if (c === 0) c = a.name.localeCompare(b.name);
+    return c * sortDir;
+  });
+}
+
+function updateStatus(){
+  const st = $('status');
+  const n = view.length, total = rows.length;
+  let txt = n.toLocaleString() + ' of ' + total.toLocaleString() + ' statblocks';
+  const pages = new Set(); for (const r of view) pages.add(r.key);
+  txt += ' · ' + pages.size.toLocaleString() + ' pages';
+  if (editedIds.size) txt += ' · ' + editedIds.size + ' edited';
+  if (dirty) txt += ' · unsaved';
+  st.textContent = txt;
+  st.classList.toggle('dirty', dirty);
+  $('btnSave').disabled = !dirty;
+}
+
+/* ── Table ─────────────────────────────────────────────────────────────── */
+/* table-layout:fixed only honours the <col> widths when the table itself has a
+   definite width, so set it to the sum of the visible columns. */
+function syncTableWidth(){
+  const total = visibleCols().reduce((n,c) => n + colWidth(c.key), 0) + 34;
+  $('dataTable').style.width = total + 'px';
+}
+
+function buildHead(){
+  const cols = visibleCols();
+  $('colgroup').innerHTML =
+    cols.map(c => '<col style="width:' + colWidth(c.key) + 'px">').join('') +
+    '<col style="width:34px">';
+  syncTableWidth();
+  $('headRow').innerHTML =
+    cols.map(c => {
+      const arrow = sortKey === c.key ? ' <span class="arrow">' + (sortDir > 0 ? '▲' : '▼') + '</span>' : '';
+      return '<th data-key="' + c.key + '" title="' + esc(c.label) + '">' + esc(c.label) + arrow +
+             '<span class="resizer" data-key="' + c.key + '"></span></th>';
+    }).join('') +
+    '<th class="colmenu-th"><button id="btnColMenu" title="Show / hide columns">☰</button></th>';
+
+  for (const th of $('headRow').querySelectorAll('th[data-key]')) {
+    th.addEventListener('click', () => {
+      if (justResized) { justResized = false; return; }
+      const k = th.dataset.key;
+      if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = 1; }
+      buildHead(); sortView(); renderBody(true);
+    });
+  }
+  for (const rz of $('headRow').querySelectorAll('.resizer')) rz.addEventListener('mousedown', startResize);
+  $('btnColMenu').addEventListener('click', openColMenu);
+}
+
+function startResize(ev){
+  ev.preventDefault(); ev.stopPropagation();
+  const key = ev.target.dataset.key;
+  const startX = ev.clientX;
+  const startW = colWidth(key);
+  ev.target.classList.add('active');
+  const cols = visibleCols();
+  const idx = cols.findIndex(c => c.key === key);
+  const colEl = $('colgroup').children[idx];
+  const move = e => {
+    const w = Math.max(40, startW + (e.clientX - startX));
+    colPrefs.widths[key] = w;
+    if (colEl) colEl.style.width = w + 'px';
+    syncTableWidth();
+  };
+  const up = () => {
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+    ev.target.classList.remove('active');
+    justResized = true;
+    setTimeout(() => { justResized = false; }, 0);
+    savePrefs();
+  };
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+}
+
+function openColMenu(ev){
+  ev.stopPropagation();
+  const m = $('colMenu');
+  m.innerHTML = COLUMNS.map(c =>
+    '<label><input type="checkbox" data-key="' + c.key + '"' +
+    (colPrefs.hidden.includes(c.key) ? '' : ' checked') + '> ' + esc(c.label) + '</label>'
+  ).join('') + '<label style="border-top:1px solid var(--line);padding-top:6px">' +
+    '<button id="colReset" style="width:100%">Reset columns</button></label>';
+  const r = ev.target.getBoundingClientRect();
+  m.hidden = false;
+  m.style.top = (r.bottom + 4) + 'px';
+  m.style.left = Math.max(8, Math.min(r.left - 180, window.innerWidth - 240)) + 'px';
+  for (const cb of m.querySelectorAll('input[data-key]')) {
+    cb.addEventListener('change', () => {
+      const k = cb.dataset.key;
+      if (cb.checked) colPrefs.hidden = colPrefs.hidden.filter(x => x !== k);
+      else if (!colPrefs.hidden.includes(k)) colPrefs.hidden.push(k);
+      savePrefs(); buildHead(); renderBody(true);
+    });
+  }
+  $('colReset').addEventListener('click', () => {
+    colPrefs = { widths:{}, hidden: DEFAULT_HIDDEN.slice() };
+    savePrefs(); m.hidden = true; buildHead(); renderBody(true);
+  });
+}
+
+function cellHTML(col, r){
+  const v = col.get(r);
+  if (col.key === 'name') {
+    const dot = editedIds.has(r.id) ? '<span class="edited-dot" title="Edited">● </span>' : '';
+    return dot + esc(v);
+  }
+  if (col.key === 'set') {
+    if (!v) return '';
+    return '<span class="badge' + (r.set === 'Dark Sun' ? ' ds' : '') + '">' + esc(v) + '</span>';
+  }
+  if (col.key === 'psi') return v ? '<span class="badge psi" title="Page has a Psionics Summary">✦</span>' : '';
+  return esc(v);
+}
+
+function renderBody(reset){
+  const tb = $('tbody');
+  if (reset) { tb.innerHTML = ''; rendered = 0; }
+  const cols = visibleCols();
+  const end = Math.min(view.length, rendered + CHUNK);
+  let html = '';
+  for (let i = rendered; i < end; i++) {
+    const r = view[i];
+    html += '<tr data-id="' + r.id + '"' + (r.id === selectedId ? ' class="selected"' : '') + '>' +
+      cols.map(c => '<td class="' + (c.num ? 'num' : '') + '" title="' + esc(c.get(r)) + '">' + cellHTML(c, r) + '</td>').join('') +
+      '<td></td></tr>';
+  }
+  tb.insertAdjacentHTML('beforeend', html);
+  rendered = end;
+  if (reset && !view.length) {
+    tb.innerHTML = '<tr><td colspan="' + (cols.length + 1) +
+      '" style="padding:22px;color:var(--muted);white-space:normal">No statblock matches these filters. ' +
+      'Try widening the Hit dice range or clearing the Found in selection.</td></tr>';
+  }
+}
+
+$('tableWrap').addEventListener('scroll', function(){
+  const el = this;
+  if (rendered < view.length && el.scrollTop + el.clientHeight > el.scrollHeight - 500) renderBody(false);
+});
+$('tbody').addEventListener('click', ev => {
+  const tr = ev.target.closest('tr[data-id]');
+  if (!tr) return;
+  selectRow(+tr.dataset.id);
+});
+
+function selectRow(id){
+  selectedId = id;
+  for (const tr of $('tbody').querySelectorAll('tr.selected')) tr.classList.remove('selected');
+  const tr = $('tbody').querySelector('tr[data-id="' + id + '"]');
+  if (tr) { tr.classList.add('selected'); tr.scrollIntoView({ block:'nearest', inline:'nearest' }); }
+  openEditor(rows.find(r => r.id === id));
+}
+
+function stepSelection(delta){
+  if (!view.length) return;
+  let i = view.findIndex(r => r.id === selectedId);
+  i = i === -1 ? 0 : Math.min(view.length - 1, Math.max(0, i + delta));
+  while (rendered <= i && rendered < view.length) renderBody(false);
+  selectRow(view[i].id);
+}
+
+/* ── Multi-select popover ──────────────────────────────────────────────── */
+let msCtx = null;
+
+function openMultiSelect(anchor, cfg){
+  msCtx = cfg;
+  const pop = $('msPop');
+  $('msSearch').value = '';
+  $('msModeRow').hidden = !cfg.modeName;
+  if (cfg.modeName) {
+    for (const rb of pop.querySelectorAll('input[name=msmode]')) rb.checked = rb.value === filters[cfg.modeName];
+  }
+  renderMsList();
+  pop.hidden = false;
+  const r = anchor.getBoundingClientRect();
+  pop.style.top = (r.bottom + 6) + 'px';
+  pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 446)) + 'px';
+  $('msSearch').focus();
+}
+
+function renderMsList(){
+  if (!msCtx) return;
+  const q = $('msSearch').value.trim().toLowerCase();
+  const items = msCtx.items().filter(it =>
+    !q || it.label.toLowerCase().includes(q) || (it.sub || '').toLowerCase().includes(q) || it.value.toLowerCase().includes(q));
+  $('msList').innerHTML = items.map(it => {
+    const on = msCtx.set.has(it.value);
+    return '<label class="' + (on ? 'checked' : '') + '" data-v="' + esc(it.value) + '">' +
+      '<input type="checkbox"' + (on ? ' checked' : '') + '>' +
+      '<span>' + esc(it.label) + (it.sub ? '<br><span class="sub">' + esc(it.sub) + '</span>' : '') + '</span>' +
+      '<span class="cnt">' + (it.count != null ? it.count : '') + '</span></label>';
+  }).join('') || '<div class="dim" style="padding:8px">Nothing matches.</div>';
+  for (const lb of $('msList').querySelectorAll('label[data-v]')) {
+    lb.addEventListener('change', () => {
+      const v = lb.dataset.v;
+      if (msCtx.set.has(v)) msCtx.set.delete(v); else msCtx.set.add(v);
+      lb.classList.toggle('checked', msCtx.set.has(v));
+      msCtx.onChange();
+    });
+  }
+}
+
+$('msSearch').addEventListener('input', renderMsList);
+$('msAll').addEventListener('click', () => {
+  const q = $('msSearch').value.trim().toLowerCase();
+  for (const it of msCtx.items()) {
+    if (!q || it.label.toLowerCase().includes(q) || (it.sub || '').toLowerCase().includes(q)) msCtx.set.add(it.value);
+  }
+  renderMsList(); msCtx.onChange();
+});
+$('msNone').addEventListener('click', () => { msCtx.set.clear(); renderMsList(); msCtx.onChange(); });
+$('msInvert').addEventListener('click', () => {
+  for (const it of msCtx.items()) { if (msCtx.set.has(it.value)) msCtx.set.delete(it.value); else msCtx.set.add(it.value); }
+  renderMsList(); msCtx.onChange();
+});
+$('msClose').addEventListener('click', () => { $('msPop').hidden = true; });
+for (const rb of $('msPop').querySelectorAll('input[name=msmode]')) {
+  rb.addEventListener('change', () => {
+    if (msCtx && msCtx.modeName) { filters[msCtx.modeName] = rb.value; msCtx.onChange(); }
+  });
+}
+
+document.addEventListener('click', ev => {
+  if (!$('msPop').hidden && !$('msPop').contains(ev.target) && !ev.target.closest('.ms-btn')) $('msPop').hidden = true;
+  if (!$('colMenu').hidden && !$('colMenu').contains(ev.target) && ev.target.id !== 'btnColMenu') $('colMenu').hidden = true;
+});
+
+/* Book counts respect every filter EXCEPT the book filter itself, so the
+   numbers tell you what selecting a book would actually add. */
+function bookCounts(){
+  const saved = filters.books;
+  filters.books = new Set();
+  const counts = {};
+  for (const r of rows) {
+    if (!matches(r)) continue;
+    for (const id of (r.src || [])) counts[id] = (counts[id] || 0) + 1;
+  }
+  filters.books = saved;
+  return counts;
+}
+
+function bookItems(){
+  const counts = bookCounts();
+  return Object.keys(books)
+    .map(id => ({
+      value: id,
+      label: books[id].title,
+      sub: [books[id].setting, books[id].year, 'TSR ' + id].filter(Boolean).join(' · '),
+      count: counts[id] || 0,
+    }))
+    .sort((a,b) => a.label.localeCompare(b.label));
+}
+function settingItems(){
+  const counts = {};
+  const saved = filters.settings;
+  filters.settings = new Set();
+  for (const r of rows) if (matches(r) && r.set) counts[r.set] = (counts[r.set] || 0) + 1;
+  filters.settings = saved;
+  return (data.settings || Object.keys(counts)).map(s => ({ value:s, label:s, count:counts[s] || 0 }));
+}
+
+$('msBooks').addEventListener('click', ev => {
+  ev.stopPropagation();
+  openMultiSelect(ev.currentTarget, {
+    items: bookItems, set: filters.books, modeName: 'booksMode',
+    onChange: () => { applyFilters(); syncFilterButtons(); },
+  });
+});
+$('msSettings').addEventListener('click', ev => {
+  ev.stopPropagation();
+  openMultiSelect(ev.currentTarget, {
+    items: settingItems, set: filters.settings, modeName: null,
+    onChange: () => { applyFilters(); syncFilterButtons(); },
+  });
+});
+
+function syncFilterButtons(){
+  const b = $('msBooks'), s = $('msSettings');
+  b.innerHTML = filters.books.size
+    ? 'Books <span class="pill">' + filters.books.size + '</span>'
+    : 'Any book';
+  b.classList.toggle('active', filters.books.size > 0);
+  b.title = filters.books.size
+    ? Array.from(filters.books).map(bookLabel).join('\n')
+    : 'Filter by the sourcebooks a monster appears in';
+  s.innerHTML = filters.settings.size
+    ? 'Settings <span class="pill">' + filters.settings.size + '</span>'
+    : 'Any setting';
+  s.classList.toggle('active', filters.settings.size > 0);
+  $('fPsi').classList.toggle('on', filters.psi);
+  $('fEdited').classList.toggle('on', filters.edited);
+}
+
+/* ── Active-filter chips ───────────────────────────────────────────────── */
+function renderChips(){
+  const out = [];
+  const chip = (label, value, clear) =>
+    '<span class="chip">' + esc(label) + ' <b>' + esc(value) + '</b>' +
+    '<button class="x" data-clear="' + clear + '" title="Remove">✕</button></span>';
+
+  if (filters.q) out.push(chip('search', filters.q.join(' '), 'q'));
+  if (filters.books.size) {
+    const names = Array.from(filters.books).map(id => (books[id] && books[id].title) || id);
+    const shown = names.length <= 2 ? names.join(' / ') : names.length + ' books';
+    out.push(chip('found in (' + filters.booksMode + ')', shown, 'books'));
+  }
+  if (filters.settings.size) {
+    const arr = Array.from(filters.settings);
+    out.push(chip('setting', arr.length <= 2 ? arr.join(' / ') : arr.length + ' settings', 'settings'));
+  }
+  if (filters.hdMin != null || filters.hdMax != null)
+    out.push(chip('hit dice', (filters.hdMin != null ? filters.hdMin : '–') + ' to ' + (filters.hdMax != null ? filters.hdMax : '–'), 'hd'));
+  if (filters.xpMin != null || filters.xpMax != null)
+    out.push(chip('xp', (filters.xpMin != null ? filters.xpMin : '–') + ' to ' + (filters.xpMax != null ? filters.xpMax : '–'), 'xp'));
+  for (const k of ['sz','int','fr','al','dt','move'])
+    if (filters[k]) out.push(chip({sz:'size',int:'intelligence',fr:'frequency',al:'alignment',dt:'diet',move:'movement'}[k], filters[k], k));
+  if (filters.psi) out.push(chip('psionic', 'yes', 'psi'));
+  if (filters.edited) out.push(chip('edited', 'yes', 'edited'));
+
+  $('chips').innerHTML = out.length ? out.join('') : '<span class="dim" style="font-size:12px">No filters — showing everything.</span>';
+  for (const btn of $('chips').querySelectorAll('button[data-clear]')) {
+    btn.addEventListener('click', () => clearFilter(btn.dataset.clear));
+  }
+}
+
+function clearFilter(what){
+  switch (what) {
+    case 'q': filters.q = ''; $('search').value = ''; break;
+    case 'books': filters.books.clear(); break;
+    case 'settings': filters.settings.clear(); break;
+    case 'hd': filters.hdMin = filters.hdMax = null; $('hdMin').value = ''; $('hdMax').value = ''; break;
+    case 'xp': filters.xpMin = filters.xpMax = null; $('xpMin').value = ''; $('xpMax').value = ''; break;
+    case 'sz': filters.sz = ''; $('fSize').value = ''; break;
+    case 'int': filters.int = ''; $('fInt').value = ''; break;
+    case 'fr': filters.fr = ''; $('fFreq').value = ''; break;
+    case 'al': filters.al = ''; $('fAlign').value = ''; break;
+    case 'dt': filters.dt = ''; $('fDiet').value = ''; break;
+    case 'move': filters.move = ''; $('fMove').value = ''; break;
+    case 'psi': filters.psi = false; break;
+    case 'edited': filters.edited = false; break;
+  }
+  syncFilterButtons(); applyFilters();
+}
+
+/* ── Filter wiring ─────────────────────────────────────────────────────── */
+let searchTimer = null;
+$('search').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    const t = e.target.value.trim().toLowerCase();
+    filters.q = t ? t.split(/\s+/) : '';
+    applyFilters();
+  }, 140);
+});
+const numField = (id, key) => $(id).addEventListener('input', e => {
+  const v = e.target.value.trim();
+  filters[key] = v === '' ? null : Number(v);
+  if (Number.isNaN(filters[key])) filters[key] = null;
+  applyFilters();
+});
+numField('hdMin','hdMin'); numField('hdMax','hdMax');
+numField('xpMin','xpMin'); numField('xpMax','xpMax');
+const selField = (id, key) => $(id).addEventListener('change', e => { filters[key] = e.target.value; applyFilters(); });
+selField('fSize','sz'); selField('fInt','int'); selField('fFreq','fr');
+selField('fAlign','al'); selField('fDiet','dt'); selField('fMove','move');
+$('fPsi').addEventListener('click', () => { filters.psi = !filters.psi; syncFilterButtons(); applyFilters(); });
+$('fEdited').addEventListener('click', () => { filters.edited = !filters.edited; syncFilterButtons(); applyFilters(); });
+
+$('btnDarkSun').addEventListener('click', () => {
+  const ids = darkSunBookIds();
+  const allOn = ids.length && ids.every(id => filters.books.has(id));
+  filters.books.clear();
+  if (!allOn) for (const id of ids) filters.books.add(id);
+  filters.booksMode = 'any';
+  syncFilterButtons(); applyFilters();
+});
+
+$('btnClear').addEventListener('click', () => {
+  filters.q = ''; filters.books.clear(); filters.settings.clear(); filters.booksMode = 'any';
+  filters.hdMin = filters.hdMax = filters.xpMin = filters.xpMax = null;
+  filters.sz = filters.int = filters.fr = filters.al = filters.dt = filters.move = '';
+  filters.psi = false; filters.edited = false;
+  for (const id of ['search','hdMin','hdMax','xpMin','xpMax','fSize','fInt','fFreq','fAlign','fDiet','fMove']) $(id).value = '';
+  syncFilterButtons(); applyFilters();
+});
+
+/* ── Editor panel ──────────────────────────────────────────────────────── */
+function openEditor(r){
+  if (!r) return;
+  const ed = $('editor');
+  ed.classList.add('open');
+  $('edSplit').hidden = false;
+
+  const srcRows = (r.src || []).map(id => {
+    const b = books[id];
+    return '<div class="srcrow"><span>' + esc(b ? b.title : 'Unknown book') + '</span>' +
+      '<span class="yr">' + esc([b && b.setting, b && b.year, id].filter(Boolean).join(' · ')) + '</span></div>';
+  }).join('') || '<div class="dim" style="font-size:12.5px">No sourcebook recorded.</div>';
+
+  const fieldRows = FIELD_ORDER.map(code =>
+    '<div class="field"><label for="f_' + code + '">' + esc(FIELD_CODES[code]) + '</label>' +
+    '<input type="text" id="f_' + code + '" data-code="' + code + '" value="' + esc(r.sb[code] || '') + '"></div>'
+  ).join('');
+
+  const extra = r.sb.x ? Object.keys(r.sb.x).map(k =>
+    '<div class="field"><label>' + esc(k) + ' <span class="dim">(non-standard)</span></label>' +
+    '<input type="text" data-xkey="' + esc(k) + '" value="' + esc(r.sb.x[k]) + '"></div>').join('') : '';
+
+  const d = r.d;
+  const derived =
+    '<b>hit dice</b> ' + (d.hd == null ? '—' : d.hd + (d.hdMod ? (d.hdMod > 0 ? '+' + d.hdMod : d.hdMod) : '') + (d.hdMax ? ' … ' + d.hdMax : '')) +
+    ' &nbsp; <b>ac</b> ' + (d.ac == null ? '—' : d.ac) +
+    ' &nbsp; <b>thac0</b> ' + (d.thac0 == null ? '—' : d.thac0) +
+    ' &nbsp; <b>xp</b> ' + (d.xp == null ? '—' : d.xp.toLocaleString()) + '<br>' +
+    '<b>size</b> ' + (d.sz || '—') + ' &nbsp; <b>int</b> ' + (d.int || '—') +
+    ' &nbsp; <b>freq</b> ' + (d.fr || '—') + ' &nbsp; <b>align</b> ' + (d.al || '—') + '<br>' +
+    '<b>move</b> ' + (d.mv == null ? '—' : d.mv) + (d.modes ? ' (' + d.modes.join(', ') + ')' : '') +
+    ' &nbsp; <b>diet</b> ' + (d.dt || '—') + ' &nbsp; <b>cycle</b> ' + (d.cyc || '—');
+
+  ed.innerHTML =
+    '<h2>' + esc(r.name) + (r.psi ? ' <span class="badge psi">psionic</span>' : '') + '</h2>' +
+    '<div class="meta">' +
+      (r.name !== r.page ? 'statblock on page <b>' + esc(r.page) + '</b><br>' : '') +
+      esc(r.set || 'no setting') + ' · <code>' + esc(r.key) + '</code> · ' +
+      '<a href="https://www.completecompendium.com/appendix/' + encodeURIComponent(r.key) + '" target="_blank" rel="noopener">view on completecompendium.com ↗</a>' +
+    '</div>' +
+    '<div class="ed-btns">' +
+      '<button id="edApply" class="primary">Apply</button>' +
+      '<button id="edRevert">Revert</button>' +
+      '<button id="edPrev" title="Ctrl+Up">↑ Prev</button>' +
+      '<button id="edNext" title="Ctrl+Down">↓ Next</button>' +
+      '<button id="edClose" title="Esc">Close</button>' +
+    '</div>' +
+    '<h3>Identity</h3>' +
+    '<div class="field"><label for="f_name">Creature name</label><input type="text" id="f_name" value="' + esc(r.name) + '"></div>' +
+    '<div class="grid2">' +
+      '<div class="field"><label for="f_set">Setting</label><select id="f_set">' +
+        '<option value=""></option>' +
+        (data.settings || []).map(s => '<option value="' + esc(s) + '"' + (s === r.set ? ' selected' : '') + '>' + esc(s) + '</option>').join('') +
+      '</select></div>' +
+      '<div class="field ro"><label>Page key</label><div class="val">' + esc(r.key) + '</div></div>' +
+    '</div>' +
+    '<h3>Found in</h3>' +
+    '<div class="srclist">' + srcRows + '</div>' +
+    '<div class="field" style="margin-top:6px"><label for="f_src">Publish IDs (comma separated)</label>' +
+      '<input type="text" id="f_src" value="' + esc((r.src || []).join(', ')) + '"></div>' +
+    '<h3>Statblock</h3>' + fieldRows +
+    (extra ? '<h3>Other fields on this page</h3>' + extra : '') +
+    '<h3>Derived (recomputed on Apply)</h3><div class="derived">' + derived + '</div>' +
+    '<div id="edWarn" class="warn" hidden></div>';
+
+  $('edApply').addEventListener('click', applyEdits);
+  $('edRevert').addEventListener('click', () => openEditor(r));
+  $('edClose').addEventListener('click', closeEditor);
+  $('edPrev').addEventListener('click', () => stepSelection(-1));
+  $('edNext').addEventListener('click', () => stepSelection(1));
+  ed.querySelectorAll('input,select').forEach(el => {
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); applyEdits(); } });
+  });
+  ed.scrollTop = 0;
+}
+
+function closeEditor(){
+  $('editor').classList.remove('open');
+  $('edSplit').hidden = true;
+  selectedId = null;
+  for (const tr of $('tbody').querySelectorAll('tr.selected')) tr.classList.remove('selected');
+}
+
+function applyEdits(){
+  const r = rows.find(x => x.id === selectedId);
+  if (!r) return;
+  let changed = false;
+  const setIf = (obj, key, val) => { if ((obj[key] || '') !== val) { if (val) obj[key] = val; else delete obj[key]; changed = true; } };
+
+  const newName = $('f_name').value.trim();
+  if (newName && newName !== r.name) { r.name = newName; changed = true; }
+
+  const newSet = $('f_set').value;
+  if ((r.set || '') !== newSet) { r.set = newSet || null; r.acr = (data.settingAcronyms || {})[newSet] || null; changed = true; }
+
+  const rawSrc = $('f_src').value.split(',').map(s => s.trim()).filter(Boolean);
+  const unknown = rawSrc.filter(id => !books[id]);
+  if (rawSrc.join('|') !== (r.src || []).join('|')) { r.src = rawSrc; changed = true; }
+
+  for (const inp of $('editor').querySelectorAll('input[data-code]')) setIf(r.sb, inp.dataset.code, inp.value.trim());
+  if (r.sb.x) for (const inp of $('editor').querySelectorAll('input[data-xkey]')) setIf(r.sb.x, inp.dataset.xkey, inp.value.trim());
+
+  if (changed) {
+    rederive(r);
+    editedIds.add(r.id);
+    dirty = true;
+    applyFilters();
+    if (view.some(x => x.id === r.id)) selectRow(r.id); else openEditor(r);
+  }
+  const warn = $('edWarn');
+  if (warn) {
+    if (unknown.length) {
+      warn.hidden = false;
+      warn.textContent = 'Publish ID' + (unknown.length > 1 ? 's' : '') + ' not in the book list: ' + unknown.join(', ') +
+        ' — the row is saved, but "Found in" will show it as #' + unknown[0] + '.';
+    } else if (changed) {
+      warn.hidden = false;
+      warn.style.color = 'var(--ok)';
+      warn.textContent = 'Applied.';
+    }
+  }
+}
+
+/* ── Save / export ─────────────────────────────────────────────────────── */
+function serialize(){
+  const clone = Object.assign({}, data);
+  clone.editedAt = new Date().toISOString();
+  clone.rows = rows.map(r => {
+    const o = Object.assign({}, r);
+    delete o._hay;
+    return o;
+  });
+  return JSON.stringify(clone);
+}
+
+async function save(){
+  if (!dirty) return;
+  const text = serialize();
+  if (fileHandle) {
+    try {
+      const w = await fileHandle.createWritable();
+      await w.write(text); await w.close();
+      dirty = false; updateStatus();
+      return;
+    } catch (e) { alert('Could not write the file: ' + e.message); return; }
+  }
+  await saveAs(text);
+}
+
+async function saveAs(text){
+  text = text || serialize();
+  if (window.showSaveFilePicker) {
+    try {
+      fileHandle = await window.showSaveFilePicker({
+        suggestedName: fileName || 'monster_index.json',
+        types: [{ description:'JSON', accept:{ 'application/json':['.json'] } }],
+      });
+      const w = await fileHandle.createWritable();
+      await w.write(text); await w.close();
+      fileName = fileHandle.name;
+      dirty = false; updateStatus();
+      return;
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  download(text, fileName || 'monster_index.json', 'application/json');
+  dirty = false; updateStatus();
+}
+
+function download(text, name, mime){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: mime }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+function exportCSV(){
+  const cols = visibleCols();
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g,'""') + '"';
+  const lines = [cols.map(c => q(c.label)).join(',')];
+  for (const r of view) lines.push(cols.map(c => q(c.get(r))).join(','));
+  download('﻿' + lines.join('\r\n'), 'monsters-filtered.csv', 'text/csv;charset=utf-8');
+}
+function exportJSON(){
+  const out = view.map(r => {
+    const o = { key:r.key, page:r.page, name:r.name, setting:r.set, foundIn: (r.src || []).map(bookLabel), psionic: !!r.psi, statblock:{} };
+    for (const c of FIELD_ORDER) if (r.sb[c]) o.statblock[FIELD_CODES[c]] = r.sb[c];
+    if (r.sb.x) Object.assign(o.statblock, r.sb.x);
+    o.derived = r.d;
+    return o;
+  });
+  download(JSON.stringify(out, null, 2), 'monsters-filtered.json', 'application/json');
+}
+
+$('btnExport').addEventListener('click', ev => {
+  ev.stopPropagation();
+  const m = $('colMenu');
+  m.innerHTML = '<label><button id="expCsv" style="width:100%">CSV (visible columns)</button></label>' +
+                '<label><button id="expJson" style="width:100%">JSON (full statblocks)</button></label>' +
+                '<label class="dim" style="font-size:12px">' + view.length.toLocaleString() + ' rows in view</label>';
+  const r = ev.target.getBoundingClientRect();
+  m.hidden = false;
+  m.style.top = (r.bottom + 4) + 'px';
+  m.style.left = Math.max(8, r.left) + 'px';
+  $('expCsv').addEventListener('click', () => { m.hidden = true; exportCSV(); });
+  $('expJson').addEventListener('click', () => { m.hidden = true; exportJSON(); });
+});
+
+/* ── File open ─────────────────────────────────────────────────────────── */
+$('btnOpen').addEventListener('click', async () => {
+  if (window.showOpenFilePicker) {
+    try {
+      const [h] = await window.showOpenFilePicker({
+        types: [{ description:'JSON', accept:{ 'application/json':['.json'] } }],
+      });
+      fileHandle = h;
+      const f = await h.getFile();
+      loadData(JSON.parse(await f.text()), f.name);
+      return;
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json,application/json';
+  inp.addEventListener('change', async () => {
+    const f = inp.files[0]; if (!f) return;
+    fileHandle = null;
+    loadData(JSON.parse(await f.text()), f.name);
+  });
+  inp.click();
+});
+
+$('btnReload').addEventListener('click', () => {
+  if (dirty && !confirm('You have unsaved edits. Reload and lose them?')) return;
+  fileHandle = null;
+  $('loading').hidden = false;
+  $('tableWrap').hidden = true;
+  autoLoad();
+});
+$('btnSave').addEventListener('click', save);
+$('btnSaveAs').addEventListener('click', () => saveAs());
+
+/* ── Panel resize ──────────────────────────────────────────────────────── */
+$('edSplit').addEventListener('mousedown', ev => {
+  ev.preventDefault();
+  const ed = $('editor');
+  const startX = ev.clientX, startW = ed.offsetWidth;
+  $('edSplit').classList.add('active');
+  const move = e => { ed.style.width = Math.max(320, Math.min(window.innerWidth - 200, startW - (e.clientX - startX))) + 'px'; };
+  const up = () => {
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+    $('edSplit').classList.remove('active');
+  };
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+});
+$('edSplit').addEventListener('dblclick', () => { $('editor').style.width = '470px'; });
+
+/* ── Keyboard ──────────────────────────────────────────────────────────── */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (!$('msPop').hidden) { $('msPop').hidden = true; return; }
+    if (!$('colMenu').hidden) { $('colMenu').hidden = true; return; }
+    closeEditor(); return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); $('search').focus(); $('search').select(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowUp') { e.preventDefault(); stepSelection(-1); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowDown') { e.preventDefault(); stepSelection(1); return; }
+});
+window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+/* ── Go ────────────────────────────────────────────────────────────────── */
+syncFilterButtons();
+autoLoad();
+</script>
+</body>
+</html>

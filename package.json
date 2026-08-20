@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "buildrelease": "node scripts/build_release_bundle.js",
+    "build:monster-index": "node scripts/build_monster_index.js",
     "develop": "gatsby develop",
     "start": "gatsby develop",
     "build": "gatsby build",
