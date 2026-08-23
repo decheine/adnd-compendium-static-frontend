@@ -51,6 +51,21 @@ tag a batch rather than 300 rows one at a time: filter to the books you want,
 open the tagger, tick a setting, then **Add**, **Remove**, or **Replace**. The
 confirm names the setting and the row count before anything changes.
 
+**Seeded from the boxed set.** The Dark Sun campaign setting shipped a
+"Monsters of Athas" appendix naming creatures from other Monstrous Compendium
+volumes that suit Athas. That list is transcribed in
+`data/athas_allowed_list.json` — every printed entry with the page(s) it
+resolved to, the judgement calls written down, and the entries that matched
+nothing left visible rather than quietly dropped — and applied by:
+
+```
+node scripts/seed_athas_allowed.js --dry-run   # report only
+node scripts/seed_athas_allowed.js             # apply
+```
+
+It is idempotent and safe to re-run after a rebuild. It tags 139 rows, taking
+`allowed in ds` from 267 to 406.
+
 These edits are curation, not derived data, so `build_monster_index.js` reads
 the previous `monster_index.json` and carries every non-default list forward,
 matching rows on page key + statblock name rather than on the positional `id`.
