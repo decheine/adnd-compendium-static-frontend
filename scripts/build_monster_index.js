@@ -20,6 +20,13 @@
  *   node scripts/build_monster_index.js
  *   npm run build:monster-index
  *
+ * Every row also carries `allowedSettings`: the campaign settings a creature is
+ * permitted in, as setting acronyms. It defaults to the row's own `acr`, but a
+ * creature can be admitted into other settings — a Monstrous Manual staple
+ * waved into Athas, say — by adding acronyms in the editor. Those edits are
+ * CURATION, not derived data, so a rebuild reads the previous index and carries
+ * every non-default list forward rather than resetting it.
+ *
  * Output: static/tools/monster_index.json  (served at /tools/monster_index.json)
  */
 
@@ -257,6 +264,33 @@ function parseXP(raw) {
 
 /* ── Build ───────────────────────────────────────────────────────────────── */
 
+/**
+ * Rows are identified across rebuilds by page key + statblock name, not by the
+ * positional `id`, so inserting a monster upstream does not shuffle curation
+ * onto the wrong creature.
+ */
+function rowIdentity(key, name) {
+  return key + '|' + name;
+}
+
+/** allowedSettings from the previous build, keyed by rowIdentity(). */
+function loadPreviousAllowed() {
+  const prev = new Map();
+  if (!fs.existsSync(OUT)) return prev;
+  try {
+    const old = JSON.parse(fs.readFileSync(OUT, 'utf8'));
+    for (const r of old.rows || []) {
+      if (Array.isArray(r.allowedSettings)) prev.set(rowIdentity(r.key, r.name), r.allowedSettings);
+    }
+  } catch (e) {
+    console.warn('  WARNING: could not read the previous index, allowedSettings edits may be lost:', e.message);
+  }
+  return prev;
+}
+
+const sameList = (a, b) =>
+  a.length === b.length && a.every((v, i) => v === b[i]);
+
 function build() {
   const monsters = read('src', 'data', 'ALL_MONSTERS.json');
   const catalog = read('src', 'data', 'Full_Catalog.json');
@@ -296,6 +330,9 @@ function build() {
     };
   }
 
+  const previousAllowed = loadPreviousAllowed();
+  let carriedForward = 0;
+
   const rows = [];
   let rowId = 0;
   const unknownBooks = new Set();
@@ -334,6 +371,15 @@ function build() {
     }
   }
 
+  /* Restore curated allowedSettings over the freshly defaulted ones. */
+  for (const r of rows) {
+    const kept = previousAllowed.get(rowIdentity(r.key, r.name));
+    if (kept && !sameList(kept, r.allowedSettings)) {
+      r.allowedSettings = kept;
+      carriedForward++;
+    }
+  }
+
   for (const r of rows) for (const id of r.src) if (books[id]) books[id].count++;
 
   const settings = Array.from(new Set(rows.map((r) => r.set).filter(Boolean))).sort();
@@ -352,6 +398,13 @@ function build() {
     },
     settings,
     settingAcronyms: catAcronyms,
+    /* acronym -> display name, deduped: CatAcronyms maps several spellings
+       ("ADnD", the &amp; variant) onto one acronym. Longest name wins. */
+    settingByAcronym: Object.entries(catAcronyms).reduce((acc, [name, acr]) => {
+      const clean_ = clean(name);
+      if (!acc[acr] || clean_.length > acc[acr].length) acc[acr] = clean_;
+      return acc;
+    }, {}),
     books,
     rows,
   };
@@ -364,6 +417,8 @@ function build() {
   console.log(`  ${monsters.length} pages -> ${rows.length} statblock rows`);
   console.log(`  ${Object.keys(books).length} books, ${settings.length} settings`);
   if (pagesWithoutStatblock) console.log(`  ${pagesWithoutStatblock} page(s) had no statblock (kept as a row)`);
+  if (carriedForward) console.log(`  ${carriedForward} curated allowedSettings list(s) carried over from the previous build`);
+  else if (previousAllowed.size) console.log('  no curated allowedSettings to carry over (all still at their default)');
   if (unknownBooks.size) {
     console.warn(`  WARNING: ${unknownBooks.size} publish id(s) cited by a monster are in neither`);
     console.warn(`  Full_Catalog.json nor all_tsr.json: ${Array.from(unknownBooks).join(', ')}`);
@@ -390,13 +445,18 @@ function makeRow(id, key, pageTitle, name, setting, sources, fields, psionic, ca
   const intel = parseIntelligence(sb.int);
   const mv = parseMovement(sb.mv);
 
+  const acr = catAcronyms[setting] || null;
+
   return {
     id,
     key,                                  // monster_key -> /appendix/<key>
     page: pageTitle,                      // monster page title
     name: name || pageTitle,              // this statblock's creature name
     set: setting,                         // campaign setting
-    acr: catAcronyms[setting] || null,
+    acr,
+    /* Settings this creature may be used in. Defaults to its own; curated in
+       the editor and carried across rebuilds. */
+    allowedSettings: acr ? [acr] : [],
     src: sources,                         // publish ids == "Found In" books
     psi: psionic || undefined,
     sb,
@@ -425,4 +485,4 @@ function makeRow(id, key, pageTitle, name, setting, sources, fields, psionic, ca
 }
 
 if (require.main === module) build();
-module.exports = { build, parseHD, parseSize, parseIntelligence, parseAlignment, FIELD_CODES };
+module.exports = { build, parseHD, parseSize, parseIntelligence, parseAlignment, rowIdentity, FIELD_CODES };

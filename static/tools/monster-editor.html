@@ -143,6 +143,28 @@
  max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;line-height:18px
  }
  .badge.psi{color:var(--info);border-color:var(--info)}
+ .badge.acr{font-family:var(--mono);font-size:10.5px;padding:0 5px;margin-right:3px;line-height:16px}
+ .badge.acr.self{color:var(--accent);border-color:var(--accent)}
+ .badge.acr.extra{color:var(--ok);border-color:var(--ok)}
+ .allow-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 10px}
+ .allow-grid label{
+ display:flex;gap:7px;align-items:center;font-size:12.5px;cursor:pointer;
+ padding:2px 4px;border-radius:4px;line-height:1.35
+ }
+ .allow-grid label:hover{background:#3a2913}
+ .allow-grid label.self{color:var(--accent)}
+ .allow-grid input{accent-color:var(--accent);width:14px;height:14px;cursor:pointer;flex:none}
+ .allow-grid .code{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-left:auto}
+ .tag-pop{
+ position:fixed;z-index:80;background:var(--panel2);border:1px solid var(--line);
+ border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;
+ box-shadow:0 6px 22px rgba(0,0,0,.6);width:390px;max-height:70vh
+ }
+ .tag-pop[hidden]{display:none}
+ .tag-pop h4{margin:0;font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
+ .tag-pop .scroll{overflow:auto;max-height:40vh}
+ .tag-pop .acts{display:flex;gap:6px;border-top:1px solid var(--line);padding-top:8px}
+ .tag-pop .acts button{flex:1}
  .badge.ds{color:var(--accent2);border-color:var(--accent2)}
  .edited-dot{color:var(--accent)}
  .dim{color:var(--muted)}
@@ -209,6 +231,10 @@
   <button id="msSettings" class="ms-btn">Any setting</button>
  </div>
  <div class="fgroup">
+  <span class="flabel">Allowed in</span>
+  <button id="msAllowed" class="ms-btn">Any setting</button>
+ </div>
+ <div class="fgroup">
   <span class="flabel">Hit dice</span>
   <input type="number" id="hdMin" class="num-range" placeholder="min" step="0.5">
   <span class="dim">–</span>
@@ -229,6 +255,7 @@
  <button id="fPsi" title="Only pages that carry a Psionics Summary">Psionic</button>
  <button id="fEdited" title="Only rows you have edited">Edited</button>
  <span class="sep"></span>
+ <button id="btnTagView" title="Add or remove allowed settings across every row currently in view">Tag view…</button>
  <button id="btnDarkSun" class="primary" title="Select every Dark Sun sourcebook in the Found in filter">Dark Sun preset</button>
  <button id="btnClear">Clear filters</button>
 </div>
@@ -251,6 +278,17 @@
 </main>
 
 <div id="colMenu" class="col-menu" hidden></div>
+<div id="tagPop" class="tag-pop" hidden>
+ <h4 id="tagHead">Tag rows in view</h4>
+ <div class="scroll"><div class="allow-grid" id="tagList"></div></div>
+ <div class="dim" style="font-size:12px" id="tagCount"></div>
+ <div class="acts">
+  <button id="tagAdd" class="primary">Add</button>
+  <button id="tagRemove">Remove</button>
+  <button id="tagReplace" title="Discard existing lists and set exactly these">Replace</button>
+ </div>
+ <button id="tagCancel">Cancel</button>
+</div>
 <div id="msPop" class="ms-pop" hidden>
  <div class="ms-tools">
   <input type="text" id="msSearch" placeholder="Filter list…">
@@ -308,6 +346,7 @@ const filters = {
   q: '',
   books: new Set(), booksMode: 'any',
   settings: new Set(),
+  allowed: new Set(), allowedMode: 'any',
   hdMin: null, hdMax: null,
   xpMin: null, xpMax: null,
   sz: '', int: '', fr: '', al: '', dt: '', move: '',
@@ -325,6 +364,7 @@ const COLUMNS = [
   { key:'name',  label:'Creature',        w:230, get:r=>r.name,        sort:r=>r.name },
   { key:'page',  label:'Page',            w:190, get:r=>r.page,        sort:r=>r.page },
   { key:'set',   label:'Setting',         w:150, get:r=>r.set||'',     sort:r=>r.set||'' },
+  { key:'allow', label:'Allowed in',      w:150, get:r=>(r.allowedSettings||[]).join(' '), sort:r=>(r.allowedSettings||[]).join(' ') },
   { key:'hd',    label:'Hit Dice',        w:88,  get:r=>r.sb.hd||'',   sort:r=>r.d.hdSort },
   { key:'ac',    label:'AC',              w:52,  num:true, get:r=>r.sb.ac||'',  sort:r=>r.d.ac },
   { key:'th',    label:'THAC0',           w:62,  num:true, get:r=>r.sb.th||'',  sort:r=>r.d.thac0 },
@@ -489,12 +529,28 @@ function bookTitles(r){ return (r.src || []).map(id => (books[id] && books[id].t
 function bookLabel(id){ const b = books[id]; return b ? (b.title + ' (' + id + ')') : ('Unknown book (' + id + ')'); }
 function haystack(r){
   if (r._hay) return r._hay;
-  const parts = [r.name, r.page, r.set, r.key].concat(bookTitles(r), r.src || []);
+  const parts = [r.name, r.page, r.set, r.key]
+    .concat(bookTitles(r), r.src || [], r.allowedSettings || [], (r.allowedSettings || []).map(acrName));
   for (const c of FIELD_ORDER) if (r.sb[c]) parts.push(r.sb[c]);
   if (r.sb.x) for (const k in r.sb.x) { parts.push(k); parts.push(r.sb.x[k]); }
   r._hay = parts.join('  ').toLowerCase();
   return r._hay;
 }
+/** Canonical acronym list, ordered by setting name. */
+function acrList(){
+  const map = (data && data.settingByAcronym) || {};
+  return Object.keys(map).sort((a,b) => map[a].localeCompare(map[b]));
+}
+function acrName(a){ return ((data && data.settingByAcronym) || {})[a] || a; }
+/** Keep a row's list in the canonical order so lists compare and read cleanly. */
+function normalizeAllowed(list){
+  const order = acrList();
+  const seen = new Set(list);
+  const out = order.filter(a => seen.has(a));
+  for (const a of list) if (!out.includes(a)) out.push(a);  // unknown acronyms kept, at the end
+  return out;
+}
+
 function darkSunBookIds(){
   return Object.keys(books).filter(id => books[id].setting === 'Dark Sun');
 }
@@ -546,7 +602,13 @@ function loadData(json, name){
   editedIds.clear();
   dirty = false;
   selectedId = null;
-  for (const r of rows) { r._hay = null; if (!r.d) rederive(r); }
+  let backfilled = 0;
+  for (const r of rows) {
+    r._hay = null;
+    if (!r.d) rederive(r);
+    if (!Array.isArray(r.allowedSettings)) { r.allowedSettings = r.acr ? [r.acr] : []; backfilled++; }
+  }
+  if (backfilled) console.info(backfilled + ' row(s) had no allowedSettings; defaulted to their own setting.');
 
   $('loading').hidden = true;
   $('empty').hidden = true;
@@ -600,6 +662,17 @@ function matches(r){
     }
   }
   if (filters.settings.size && !filters.settings.has(r.set)) return false;
+
+  if (filters.allowed.size) {
+    const allow = r.allowedSettings || [];
+    if (filters.allowedMode === 'all') {
+      for (const a of filters.allowed) if (allow.indexOf(a) === -1) return false;
+    } else {
+      let hit = false;
+      for (const a of allow) if (filters.allowed.has(a)) { hit = true; break; }
+      if (!hit) return false;
+    }
+  }
 
   if (filters.hdMin != null || filters.hdMax != null) {
     const lo = r.d.hd;
@@ -761,6 +834,13 @@ function cellHTML(col, r){
     if (!v) return '';
     return '<span class="badge' + (r.set === 'Dark Sun' ? ' ds' : '') + '">' + esc(v) + '</span>';
   }
+  if (col.key === 'allow') {
+    const list = r.allowedSettings || [];
+    if (!list.length) return '<span class="dim">—</span>';
+    return list.map(a =>
+      '<span class="badge acr ' + (a === r.acr ? 'self' : 'extra') + '" title="' +
+      esc(acrName(a)) + (a === r.acr ? ' (own setting)' : ' (added)') + '">' + esc(a) + '</span>').join('');
+  }
   if (col.key === 'psi') return v ? '<span class="badge psi" title="Page has a Psionics Summary">✦</span>' : '';
   return esc(v);
 }
@@ -876,6 +956,7 @@ for (const rb of $('msPop').querySelectorAll('input[name=msmode]')) {
 document.addEventListener('click', ev => {
   if (!$('msPop').hidden && !$('msPop').contains(ev.target) && !ev.target.closest('.ms-btn')) $('msPop').hidden = true;
   if (!$('colMenu').hidden && !$('colMenu').contains(ev.target) && ev.target.id !== 'btnColMenu') $('colMenu').hidden = true;
+  if (!$('tagPop').hidden && !$('tagPop').contains(ev.target) && ev.target.id !== 'btnTagView') $('tagPop').hidden = true;
 });
 
 /* Book counts respect every filter EXCEPT the book filter itself, so the
@@ -919,6 +1000,26 @@ $('msBooks').addEventListener('click', ev => {
     onChange: () => { applyFilters(); syncFilterButtons(); },
   });
 });
+function allowedItems(){
+  const counts = {};
+  const saved = filters.allowed;
+  filters.allowed = new Set();
+  for (const r of rows) {
+    if (!matches(r)) continue;
+    for (const a of (r.allowedSettings || [])) counts[a] = (counts[a] || 0) + 1;
+  }
+  filters.allowed = saved;
+  return acrList().map(a => ({ value:a, label:acrName(a), sub:a, count:counts[a] || 0 }));
+}
+
+$('msAllowed').addEventListener('click', ev => {
+  ev.stopPropagation();
+  openMultiSelect(ev.currentTarget, {
+    items: allowedItems, set: filters.allowed, modeName: 'allowedMode',
+    onChange: () => { applyFilters(); syncFilterButtons(); },
+  });
+});
+
 $('msSettings').addEventListener('click', ev => {
   ev.stopPropagation();
   openMultiSelect(ev.currentTarget, {
@@ -940,6 +1041,14 @@ function syncFilterButtons(){
     ? 'Settings <span class="pill">' + filters.settings.size + '</span>'
     : 'Any setting';
   s.classList.toggle('active', filters.settings.size > 0);
+  const al = $('msAllowed');
+  al.innerHTML = filters.allowed.size
+    ? 'Allowed <span class="pill">' + filters.allowed.size + '</span>'
+    : 'Any setting';
+  al.classList.toggle('active', filters.allowed.size > 0);
+  al.title = filters.allowed.size
+    ? Array.from(filters.allowed).map(a => acrName(a) + ' (' + a + ')').join('\n')
+    : 'Filter by the settings a creature is allowed in';
   $('fPsi').classList.toggle('on', filters.psi);
   $('fEdited').classList.toggle('on', filters.edited);
 }
@@ -961,6 +1070,11 @@ function renderChips(){
     const arr = Array.from(filters.settings);
     out.push(chip('setting', arr.length <= 2 ? arr.join(' / ') : arr.length + ' settings', 'settings'));
   }
+  if (filters.allowed.size) {
+    const arr = Array.from(filters.allowed);
+    out.push(chip('allowed in (' + filters.allowedMode + ')',
+      arr.length <= 3 ? arr.map(acrName).join(' / ') : arr.length + ' settings', 'allowed'));
+  }
   if (filters.hdMin != null || filters.hdMax != null)
     out.push(chip('hit dice', (filters.hdMin != null ? filters.hdMin : '–') + ' to ' + (filters.hdMax != null ? filters.hdMax : '–'), 'hd'));
   if (filters.xpMin != null || filters.xpMax != null)
@@ -981,6 +1095,7 @@ function clearFilter(what){
     case 'q': filters.q = ''; $('search').value = ''; break;
     case 'books': filters.books.clear(); break;
     case 'settings': filters.settings.clear(); break;
+    case 'allowed': filters.allowed.clear(); break;
     case 'hd': filters.hdMin = filters.hdMax = null; $('hdMin').value = ''; $('hdMax').value = ''; break;
     case 'xp': filters.xpMin = filters.xpMax = null; $('xpMin').value = ''; $('xpMax').value = ''; break;
     case 'sz': filters.sz = ''; $('fSize').value = ''; break;
@@ -1030,6 +1145,7 @@ $('btnDarkSun').addEventListener('click', () => {
 
 $('btnClear').addEventListener('click', () => {
   filters.q = ''; filters.books.clear(); filters.settings.clear(); filters.booksMode = 'any';
+  filters.allowed.clear(); filters.allowedMode = 'any';
   filters.hdMin = filters.hdMax = filters.xpMin = filters.xpMax = null;
   filters.sz = filters.int = filters.fr = filters.al = filters.dt = filters.move = '';
   filters.psi = false; filters.edited = false;
@@ -1093,6 +1209,17 @@ function openEditor(r){
       '</select></div>' +
       '<div class="field ro"><label>Page key</label><div class="val">' + esc(r.key) + '</div></div>' +
     '</div>' +
+    '<h3>Allowed settings</h3>' +
+    '<div class="allow-grid" id="allowGrid">' +
+      acrList().map(a =>
+        '<label class="' + (a === r.acr ? 'self' : '') + '" title="' + esc(acrName(a)) + '">' +
+        '<input type="checkbox" data-acr="' + esc(a) + '"' +
+        ((r.allowedSettings || []).includes(a) ? ' checked' : '') + '>' +
+        '<span>' + esc(acrName(a)) + '</span><span class="code">' + esc(a) + '</span></label>').join('') +
+    '</div>' +
+    '<div class="dim" style="font-size:11.5px;margin-top:5px">' +
+      (r.acr ? 'Own setting is <b>' + esc(r.acr) + '</b>. ' : '') +
+      'Tick others to admit this creature there.</div>' +
     '<h3>Found in</h3>' +
     '<div class="srclist">' + srcRows + '</div>' +
     '<div class="field" style="margin-top:6px"><label for="f_src">Publish IDs (comma separated)</label>' +
@@ -1131,6 +1258,14 @@ function applyEdits(){
 
   const newSet = $('f_set').value;
   if ((r.set || '') !== newSet) { r.set = newSet || null; r.acr = (data.settingAcronyms || {})[newSet] || null; changed = true; }
+
+  const grid = $('allowGrid');
+  if (grid) {
+    const picked = normalizeAllowed(
+      Array.from(grid.querySelectorAll('input[data-acr]:checked')).map(cb => cb.dataset.acr));
+    const cur = r.allowedSettings || [];
+    if (picked.join('|') !== cur.join('|')) { r.allowedSettings = picked; changed = true; }
+  }
 
   const rawSrc = $('f_src').value.split(',').map(s => s.trim()).filter(Boolean);
   const unknown = rawSrc.filter(id => !books[id]);
@@ -1222,7 +1357,11 @@ function exportCSV(){
 }
 function exportJSON(){
   const out = view.map(r => {
-    const o = { key:r.key, page:r.page, name:r.name, setting:r.set, foundIn: (r.src || []).map(bookLabel), psionic: !!r.psi, statblock:{} };
+    const o = {
+      key:r.key, page:r.page, name:r.name, setting:r.set,
+      allowedSettings: r.allowedSettings || [],
+      foundIn: (r.src || []).map(bookLabel), psionic: !!r.psi, statblock:{},
+    };
     for (const c of FIELD_ORDER) if (r.sb[c]) o.statblock[FIELD_CODES[c]] = r.sb[c];
     if (r.sb.x) Object.assign(o.statblock, r.sb.x);
     o.derived = r.d;
@@ -1278,6 +1417,63 @@ $('btnReload').addEventListener('click', () => {
 $('btnSave').addEventListener('click', save);
 $('btnSaveAs').addEventListener('click', () => saveAs());
 
+/* ── Bulk tagging ──────────────────────────────────────────────────────────
+   Tagging one row at a time does not scale to 3,509 of them: the point of
+   allowedSettings is to wave a whole filtered batch — everything in Terrors of
+   the Desert, say — into another setting at once. This applies to exactly the
+   rows currently in view. */
+$('btnTagView').addEventListener('click', ev => {
+  ev.stopPropagation();
+  if (!view.length) { alert('No rows in view to tag.'); return; }
+  const pop = $('tagPop');
+  $('tagList').innerHTML = acrList().map(a => {
+    const n = view.reduce((c,r) => c + ((r.allowedSettings || []).includes(a) ? 1 : 0), 0);
+    return '<label title="' + esc(acrName(a)) + '"><input type="checkbox" data-acr="' + esc(a) + '">' +
+      '<span>' + esc(acrName(a)) + '</span><span class="code">' + esc(a) +
+      (n ? ' · ' + n : '') + '</span></label>';
+  }).join('');
+  $('tagCount').textContent = view.length.toLocaleString() +
+    ' row' + (view.length === 1 ? '' : 's') + ' in view will be changed.';
+  pop.hidden = false;
+  const r = ev.currentTarget.getBoundingClientRect();
+  pop.style.top = (r.bottom + 6) + 'px';
+  pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 406)) + 'px';
+});
+
+function tagPicked(){
+  return Array.from($('tagList').querySelectorAll('input[data-acr]:checked')).map(cb => cb.dataset.acr);
+}
+
+function applyTag(mode){
+  const picked = tagPicked();
+  if (!picked.length) { alert('Pick at least one setting first.'); return; }
+  const names = picked.map(acrName).join(', ');
+  const verb = mode === 'add' ? 'Add' : mode === 'remove' ? 'Remove' : 'Replace every list with';
+  if (!confirm(verb + ' ' + names + ' — ' + view.length.toLocaleString() + ' rows in view?')) return;
+
+  let touched = 0;
+  for (const r of view) {
+    const before = (r.allowedSettings || []).join('|');
+    let next;
+    if (mode === 'add') next = normalizeAllowed((r.allowedSettings || []).concat(picked));
+    else if (mode === 'remove') next = (r.allowedSettings || []).filter(a => picked.indexOf(a) === -1);
+    else next = normalizeAllowed(picked.slice());
+    if (next.join('|') !== before) { r.allowedSettings = next; r._hay = null; editedIds.add(r.id); touched++; }
+  }
+  $('tagPop').hidden = true;
+  if (touched) { dirty = true; applyFilters(); }
+  else updateStatus();
+  const st = $('status');
+  const prev = st.textContent;
+  st.textContent = touched ? (touched.toLocaleString() + ' row(s) retagged — remember to Save') : 'Nothing to change';
+  setTimeout(() => { if (st.textContent !== prev) updateStatus(); }, 2600);
+}
+
+$('tagAdd').addEventListener('click', () => applyTag('add'));
+$('tagRemove').addEventListener('click', () => applyTag('remove'));
+$('tagReplace').addEventListener('click', () => applyTag('replace'));
+$('tagCancel').addEventListener('click', () => { $('tagPop').hidden = true; });
+
 /* ── Panel resize ──────────────────────────────────────────────────────── */
 $('edSplit').addEventListener('mousedown', ev => {
   ev.preventDefault();
@@ -1298,6 +1494,7 @@ $('edSplit').addEventListener('dblclick', () => { $('editor').style.width = '470
 /* ── Keyboard ──────────────────────────────────────────────────────────── */
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
+    if (!$('tagPop').hidden) { $('tagPop').hidden = true; return; }
     if (!$('msPop').hidden) { $('msPop').hidden = true; return; }
     if (!$('colMenu').hidden) { $('colMenu').hidden = true; return; }
     closeEditor(); return;

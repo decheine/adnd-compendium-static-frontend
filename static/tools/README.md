@@ -32,6 +32,31 @@ matches on a monster's `sources` / `TSR` publish ids rather than on the single
 `setting: "Dark Sun"`, but 319 appear in a Dark Sun sourcebook, the extra ones
 being Monstrous-Manual staples reprinted in *DSE2 Black Spine* and friends.
 
+### `allowedSettings`
+
+Every row carries `allowedSettings`, an array of setting acronyms (`ds`, `fr`,
+`ps`…) naming the campaign settings a creature may be used in. It defaults to
+the row's own `acr` — one entry — because a creature starts out allowed only
+where it was printed.
+
+The point is that this is editable. A great many perfectly good Athasian
+encounters are Monstrous Manual stock reprinted in *DSE2 Black Spine*; ticking
+`ds` on them says "this one is welcome on Athas" without pretending it was ever
+a Dark Sun monster. The `Allowed in` column shows the creature's own setting in
+gold and anything added in green, and the `Allowed in` filter reads the array
+rather than the single `setting` field.
+
+**Tag view…** applies a change to every row currently in view, which is how you
+tag a batch rather than 300 rows one at a time: filter to the books you want,
+open the tagger, tick a setting, then **Add**, **Remove**, or **Replace**. The
+confirm names the setting and the row count before anything changes.
+
+These edits are curation, not derived data, so `build_monster_index.js` reads
+the previous `monster_index.json` and carries every non-default list forward,
+matching rows on page key + statblock name rather than on the positional `id`.
+A rebuild will not silently reset your tagging — but the file is still
+generated, so commit it once you have curation worth keeping.
+
 ### Running it
 
 Fetching a local JSON file only works over HTTP, so either serve the folder:
@@ -61,7 +86,9 @@ Keys: `Ctrl+S` save · `Ctrl+F` search · `Ctrl+↑`/`Ctrl+↓` previous/next ro
 
 ### Editing caveat
 
-Edits are saved into `monster_index.json`, which is a **derived** file — the
-next `build_monster_index.js` run overwrites them. Treat the editor as a
-scratchpad and a way to export corrections; changes meant to stick belong in
+Edits are saved into `monster_index.json`, which is a **derived** file.
+`allowedSettings` survives a rebuild (see above); everything else — corrected
+hit dice, renamed creatures, fixed sources — does **not**, and will be
+overwritten the next time the index is generated. Treat those as a scratchpad
+and a way to export corrections; changes meant to stick belong in
 `src/data/ALL_MONSTERS.json`.
